@@ -1,0 +1,16 @@
+[Unit]
+Description=CyberITEX API
+After=network.target redis-server.service
+
+[Service]
+User=root
+WorkingDirectory=/opt/cyberitex-flask-api
+EnvironmentFile=/opt/cyberitex-flask-api/.env
+ExecStart=/opt/cyberitex-flask-api/venv/bin/gunicorn -w ${GUNICORN_WORKERS} --timeout ${GUNICORN_TIMEOUT} --log-level ${GUNICORN_LOGLEVEL} -b ${FLASK_HOST}:${FLASK_PORT} app:app
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

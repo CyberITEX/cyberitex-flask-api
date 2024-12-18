@@ -1,0 +1,19 @@
+[Unit]
+Description=Celery Worker for CyberITEX API
+After=network.target redis-server.service
+PartOf=api.service 
+Requires=redis-server.service
+
+[Service]
+User=root
+EnvironmentFile=/opt/cyberitex-flask-api/.env
+WorkingDirectory=/opt/cyberitex-flask-api
+Environment="PATH=/opt/cyberitex-flask-api/venv/bin"
+ExecStart=/opt/cyberitex-flask-api/venv/bin/celery -A v1.tasks.routes worker --loglevel=${CELERY_LOGLEVEL} -c ${CELERY_WORKERS}
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
