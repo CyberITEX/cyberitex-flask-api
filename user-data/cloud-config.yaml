@@ -3,4 +3,4 @@ package_update: true
 package_upgrade: true
 
 runcmd:
-  - curl -sSL https://raw.githubusercontent.com/CyberITEX/cyberitex-flask-api/main/user-data/install.sh | bash -s -- alex
+  - curl -sSL https://raw.githubusercontent.com/CyberITEX/cyberitex-flask-api/main/user-data/install.sh | bash -s -- root 8G hosting.cyberitex.com
