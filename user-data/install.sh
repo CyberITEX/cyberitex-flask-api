@@ -209,4 +209,25 @@ else
     echo "Celery service failed to start."
 fi
 
+
+########################################
+# Add Aliases to .bashrc (if not present)
+########################################
+BASHRC_FILE=~/.bashrc
+
+# Alias 1: dfh
+if ! grep -qxF "alias dfh='df -h | grep -E \"/dev/sda1|/dev/sdb\" | grep -v \"/dev/sda15\"'" "$BASHRC_FILE"; then
+    echo "Adding 'dfh' alias to $BASHRC_FILE..."
+    echo "alias dfh='df -h | grep -E \"/dev/sda1|/dev/sdb\" | grep -v \"/dev/sda15\"'" | sudo tee -a "$BASHRC_FILE" > /dev/null
+fi
+
+# Alias 2: sourcep
+if ! grep -qxF "alias sourcep='source /opt/cyberitex-flask-api/venv/bin/activate'" "$BASHRC_FILE"; then
+    echo "Adding 'sourcep' alias to $BASHRC_FILE..."
+    echo "alias sourcep='source /opt/cyberitex-flask-api/venv/bin/activate'" | sudo tee -a "$BASHRC_FILE" > /dev/null
+fi
+
+source ~/.bashrc
+
+
 echo "CyberITEX API Setup Script completed!"
