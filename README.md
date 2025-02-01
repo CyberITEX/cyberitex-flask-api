@@ -5,12 +5,12 @@ Welcome to the **CyberITEX Flask API**, a scalable and modular Flask-based API d
 ---
 
 ## **Key Features**
-- ⚡ **Rate Limiting**: Powered by Flask-Limiter to control API usage effectively.
-- ⛑ **API Key Authorization**: Secure sensitive endpoints with `X-API-Key` headers.
-- 🔐 **Structured Logging**: Logs all incoming requests, including HTTP method, path, headers, and IP.
-- ❓ **Custom Error Handling**: User-friendly responses for common errors (e.g., 404, 405, 429, 500).
-- 🏠 **Environment-Specific Configurations**: Centralized configuration via `config.py` and `.env`.
-- 📊 **Comprehensive Testing**: Unit tests for routes, error handlers, and middlewares using `pytest`.
+- ⚡ **Rate Limiting**: Powered by Flask-Limiter to control API usage effectively.  
+- ⛑ **API Key Authorization**: Secure sensitive endpoints with `X-API-Key` headers.  
+- 🔐 **Structured Logging**: Logs all incoming requests, including HTTP method, path, headers, and IP.  
+- ❓ **Custom Error Handling**: User-friendly responses for common errors (e.g., 404, 405, 429, 500).  
+- 🏠 **Environment-Specific Configurations**: Centralized configuration via `config.py` and `.env`.  
+- 📊 **Comprehensive Testing**: Unit tests for routes, error handlers, and middlewares using `pytest`.  
 - ⚒️ **Modular Structure**: Organized for easy maintenance and extensibility.
 
 ---
@@ -25,23 +25,42 @@ Easily deploy the API on a cloud server, such as AWS EC2 or Azure, using the inc
    - Configure your security group to open port `5000` (or your defined `FLASK_PORT`).
 
 2. **Add the User-Data Script**:
-   Include the following in the user-data field:
-   ### **Without a Custom User** (Defaults to `ubuntu`):
+   When launching the EC2 instance, include one of the following user-data scripts. The script accepts **up to three parameters**:
+
+   1. **Custom User** (defaults to `ubuntu` if omitted)  
+   2. **RAM Size for Swap** (defaults to `8G` if omitted)  
+   3. **Hostname** (no change if omitted)
+
+   #### **Default Installation** (no custom user, 8G swap, no hostname change):
    ```bash
    #!/bin/bash
    set -e
    curl -sSL https://raw.githubusercontent.com/CyberITEX/cyberitex-flask-api/main/user-data/install.sh | bash
    ```
 
-   ### **With a Custom User** (e.g., `alex`):
+   #### **Custom User** (e.g., `alex`), 8G swap, no hostname change:
    ```bash
    #!/bin/bash
    set -e
    curl -sSL https://raw.githubusercontent.com/CyberITEX/cyberitex-flask-api/main/user-data/install.sh | bash -s -- alex
    ```
 
+   #### **Custom User & RAM Size** (e.g., `alex` and `16G`), no hostname change:
+   ```bash
+   #!/bin/bash
+   set -e
+   curl -sSL https://raw.githubusercontent.com/CyberITEX/cyberitex-flask-api/main/user-data/install.sh | bash -s -- alex 16G
+   ```
+
+   #### **Custom User, RAM Size, & Hostname** (e.g., `alex`, `16G`, `myserver`):
+   ```bash
+   #!/bin/bash
+   set -e
+   curl -sSL https://raw.githubusercontent.com/CyberITEX/cyberitex-flask-api/main/user-data/install.sh | bash -s -- alex 16G myserver
+   ```
+
 3. **Access Your API**:
-   Once the instance is running, the API will be available on the configured port.
+   Once the instance is running, the API will be available on the configured port (default `5000`).
 
 ---
 
@@ -67,7 +86,8 @@ Easily deploy the API on a cloud server, such as AWS EC2 or Azure, using the inc
    ```bash
    python3 -m venv venv
    source venv/bin/activate  # For Linux/macOS
-   venv\Scripts\activate   # For Windows
+   # or for Windows:
+   venv\Scripts\activate
    ```
 
 3. **Install Dependencies**:
@@ -102,17 +122,17 @@ Easily deploy the API on a cloud server, such as AWS EC2 or Azure, using the inc
 
 ### **General Routes**
 
-| **Method** | **Endpoint**      | **Description**              |
-|------------|-------------------|------------------------------|
-| `GET`      | `/`               | Welcome message.             |
-| `GET`      | `/example`        | Example endpoint.            |
-| `POST`     | `/upload`         | Example for content upload.  |
+| **Method** | **Endpoint** | **Description**             |
+|------------|-------------|------------------------------|
+| `GET`      | `/`         | Welcome message.            |
+| `GET`      | `/example`  | Example endpoint.           |
+| `POST`     | `/upload`   | Example for content upload. |
 
 ### **Protected Routes**
 
-| **Method** | **Endpoint**      | **Description**              |
-|------------|-------------------|------------------------------|
-| `GET`      | `/protected`      | Access protected resources.  |
+| **Method** | **Endpoint**  | **Description**              |
+|------------|--------------|------------------------------|
+| `GET`      | `/protected` | Access protected resources.  |
 
 **Headers Required**:
 - `X-API-Key`: Your API key.
@@ -123,15 +143,15 @@ Easily deploy the API on a cloud server, such as AWS EC2 or Azure, using the inc
 ## **Error Handling**
 The API provides structured error responses for common issues:
 
-| **HTTP Code** | **Error**                     | **Message**                                                                 |
-|---------------|-------------------------------|-----------------------------------------------------------------------------|
-| `400`         | Bad Request                  | Invalid syntax or missing data.                                            |
-| `401`         | Unauthorized                 | API key is missing or invalid.                                             |
-| `404`         | Not Found                    | The requested URL was not found.                                           |
-| `405`         | Method Not Allowed           | The HTTP method is not allowed for the requested endpoint.                 |
-| `415`         | Unsupported Media Type       | Content type is unsupported. Check the `Content-Type` header.              |
-| `429`         | Too Many Requests            | Exceeded the rate limit.                                                   |
-| `500`         | Internal Server Error        | An unexpected server error occurred.                                       |
+| **HTTP Code** | **Error**               | **Message**                                                                 |
+|---------------|-------------------------|-----------------------------------------------------------------------------|
+| `400`         | Bad Request            | Invalid syntax or missing data.                                            |
+| `401`         | Unauthorized           | API key is missing or invalid.                                             |
+| `404`         | Not Found              | The requested URL was not found.                                           |
+| `405`         | Method Not Allowed     | The HTTP method is not allowed for the requested endpoint.                 |
+| `415`         | Unsupported Media Type | Content type is unsupported. Check the `Content-Type` header.              |
+| `429`         | Too Many Requests      | Exceeded the rate limit.                                                   |
+| `500`         | Internal Server Error  | An unexpected server error occurred.                                       |
 
 ---
 
@@ -184,4 +204,3 @@ cyberitex-flask-api/
 
 ## **License**
 This project is licensed under the MIT License. See the `LICENSE` file for more details. 📚
-
