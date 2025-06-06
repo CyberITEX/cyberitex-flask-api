@@ -207,8 +207,8 @@ setup_aliases() {
     # Add dfh alias (simplified version)
     if ! grep -q "^alias dfh=" "$bashrc" 2>/dev/null; then
         cat << 'EOF' >> "$bashrc"
-# Show disk usage for main filesystems
-alias dfh='df -h | grep -E "^/dev/|^Filesystem" | grep -v docker'
+# Show disk usage for main filesystems (exclude boot partitions)
+alias dfh='df -h | grep -E "^/dev/|^Filesystem" | grep -v docker | grep -v "/boot"'
 EOF
     fi
     
