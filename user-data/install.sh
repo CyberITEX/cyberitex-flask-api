@@ -1,233 +1,248 @@
 #!/bin/bash
 
-exec > >(tee -i /var/log/cyberitex-setup.log) 2>&1
-echo "Starting CyberITEX API Setup Script..."
+# CyberITEX API Setup Script - Simplified Version
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+
+# Configuration
+readonly SCRIPT_NAME="CyberITEX API Setup"
+readonly LOG_FILE="/var/log/cyberitex-setup.log"
+readonly APP_DIR="/opt/cyberitex-flask-api"
+readonly REPO_URL="https://github.com/CyberITEX/cyberitex-flask-api.git"
+
+# Parse arguments with defaults
+readonly CUSTOM_USER="${1:-ubuntu}"
+readonly RAM_SIZE="${2:-8G}"
+readonly HOSTNAME_OPTIONAL="${3:-}"
+
+# Logging setup
+exec > >(tee -i "$LOG_FILE") 2>&1
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+error_exit() {
+    log "ERROR: $1"
+    exit 1
+}
+
+check_root() {
+    [[ $EUID -eq 0 ]] && error_exit "Do not run this script as root"
+}
 
 ########################################
-# Parse Script Arguments
+# Main Functions
 ########################################
-CUSTOM_USER=${1:-ubuntu}   # First argument, defaults to 'ubuntu' if not provided
-RAM_SIZE=${2:-8G}          # Second argument, defaults to '8G' if not provided
-HOSTNAME_OPTIONAL=$3       # Third argument, optional
 
-########################################
-# (Optional) Set System Hostname
-########################################
-if [ -n "$HOSTNAME_OPTIONAL" ]; then
-    echo "Setting hostname to '$HOSTNAME_OPTIONAL'..."
-    sudo hostnamectl set-hostname "$HOSTNAME_OPTIONAL"
-else
-    echo "No hostname provided. Skipping hostname configuration."
-fi
-
-echo "Using CUSTOM_USER=${CUSTOM_USER}, RAM_SIZE=${RAM_SIZE}, HOSTNAME=${HOSTNAME_OPTIONAL}"
-
-########################################
-# Update and Upgrade System Packages
-########################################
-sudo debconf-set-selections <<< 'debconf debconf/frontend select Noninteractive'
-export DEBIAN_FRONTEND=noninteractive
-export NEEDRESTART_MODE=a
-
-sudo apt-get update -y
-sudo apt-get full-upgrade -y -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef"
-sudo apt-get install -y linux-headers-$(uname -r) linux-image-$(uname -r)
-
-########################################
-# Install Required System Packages
-########################################
-sudo apt-get install -y python3 python3-pip python3-venv redis-server curl git tree
-
-########################################
-# Enable and Configure Redis
-########################################
-sudo systemctl enable redis-server
-sudo systemctl start redis-server
-sudo systemctl is-enabled redis-server
-
-# Enable Redis persistence
-sudo sed -i 's/^# save 900 1/save 900 1/' /etc/redis/redis.conf
-sudo sed -i 's/^# save 300 10/save 300 10/' /etc/redis/redis.conf
-sudo sed -i 's/^# save 60 10000/save 60 10000/' /etc/redis/redis.conf
-sudo systemctl restart redis-server
-
-########################################
-# Set Up Swapfile with Optional RAM Size
-########################################
-SWAPFILE="/swapfile"
-
-if [ ! -f "$SWAPFILE" ]; then
-    echo "Creating swapfile of size $RAM_SIZE..."
-    sudo fallocate -l $RAM_SIZE $SWAPFILE
-    sudo chmod 600 $SWAPFILE
-    sudo mkswap $SWAPFILE
-    sudo swapon $SWAPFILE
-    echo "$SWAPFILE none swap sw 0 0" | sudo tee -a /etc/fstab
-else
-    echo "Swapfile already exists. Skipping creation."
-fi
-
-# Make swap permanent
-sudo cp /etc/fstab /etc/fstab.bak
-grep -q "$SWAPFILE" /etc/fstab || echo "$SWAPFILE none swap sw 0 0" | sudo tee -a /etc/fstab
-
-# Adjust swappiness and system configurations
-sudo sysctl vm.swappiness=10
-CONFIG_FILE="/etc/sysctl.conf"
-CONFIG_LINES=(
-    "vm.swappiness=10"
-    "vm.vfs_cache_pressure=754"
-    "vm.max_map_count=262144"
-    "fs.inotify.max_user_watches=524288"
-)
-
-for line in "${CONFIG_LINES[@]}"; do
-    if ! grep -q "^$line" "$CONFIG_FILE"; then
-        echo "$line" | sudo tee -a "$CONFIG_FILE" > /dev/null
+setup_hostname() {
+    if [[ -n "$HOSTNAME_OPTIONAL" ]]; then
+        log "Setting hostname to '$HOSTNAME_OPTIONAL'"
+        sudo hostnamectl set-hostname "$HOSTNAME_OPTIONAL"
+    else
+        log "No hostname provided, skipping"
     fi
-done
+}
 
-########################################
-# Check or Create the Custom User
-########################################
-if ! id "$CUSTOM_USER" &>/dev/null; then
-    echo "Creating user '$CUSTOM_USER'..."
+update_system() {
+    log "Updating system packages"
+    
+    # Set non-interactive mode
+    sudo debconf-set-selections <<< 'debconf debconf/frontend select Noninteractive'
+    export DEBIAN_FRONTEND=noninteractive
+    export NEEDRESTART_MODE=a
+    
+    sudo apt-get update -y
+    sudo apt-get full-upgrade -y -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef"
+    sudo apt-get install -y \
+        linux-headers-$(uname -r) \
+        linux-image-$(uname -r) \
+        python3 python3-pip python3-venv \
+        redis-server curl git tree
+}
+
+setup_redis() {
+    log "Configuring Redis"
+    
+    sudo systemctl enable redis-server
+    sudo systemctl start redis-server
+    
+    # Enable Redis persistence
+    sudo sed -i -e 's/^# save 900 1/save 900 1/' \
+                -e 's/^# save 300 10/save 300 10/' \
+                -e 's/^# save 60 10000/save 60 10000/' \
+                /etc/redis/redis.conf
+    
+    sudo systemctl restart redis-server
+    
+    # Verify Redis is working
+    redis-cli ping | grep -q "PONG" || error_exit "Redis failed to start"
+}
+
+setup_swap() {
+    local swapfile="/swapfile"
+    
+    if [[ -f "$swapfile" ]]; then
+        log "Swapfile already exists, skipping creation"
+        return
+    fi
+    
+    log "Creating ${RAM_SIZE} swapfile"
+    sudo fallocate -l "$RAM_SIZE" "$swapfile"
+    sudo chmod 600 "$swapfile"
+    sudo mkswap "$swapfile"
+    sudo swapon "$swapfile"
+    
+    # Add to fstab if not already present
+    grep -q "$swapfile" /etc/fstab || echo "$swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
+}
+
+configure_system() {
+    log "Configuring system parameters"
+    
+    # Set swappiness
+    sudo sysctl vm.swappiness=10
+    
+    # Update sysctl.conf
+    local config_lines=(
+        "vm.swappiness=10"
+        "vm.vfs_cache_pressure=754"
+        "vm.max_map_count=262144"
+        "fs.inotify.max_user_watches=524288"
+    )
+    
+    for line in "${config_lines[@]}"; do
+        grep -q "^$line" /etc/sysctl.conf || echo "$line" | sudo tee -a /etc/sysctl.conf > /dev/null
+    done
+}
+
+setup_user() {
+    if id "$CUSTOM_USER" &>/dev/null; then
+        log "User '$CUSTOM_USER' already exists"
+        return
+    fi
+    
+    log "Creating user '$CUSTOM_USER'"
     sudo useradd -m -s /bin/bash "$CUSTOM_USER"
-    echo "User '$CUSTOM_USER' created successfully."
-
-    # Add user to sudo group
     sudo usermod -aG sudo "$CUSTOM_USER"
-    echo "User '$CUSTOM_USER' has been added to the sudo group."
-else
-    echo "User '$CUSTOM_USER' already exists."
-fi
+}
 
-########################################
-# Configure Git for First-Time Use
-########################################
-git config --global user.name "CyberITEX"
-git config --global user.email "support@cyberitex.com"
+setup_git() {
+    log "Configuring Git"
+    git config --global user.name "CyberITEX"
+    git config --global user.email "support@cyberitex.com"
+}
 
-########################################
-# Set Up the Flask App
-########################################
-APP_DIR="/opt/cyberitex-flask-api"
-REPO_URL="https://github.com/CyberITEX/cyberitex-flask-api.git"
+setup_application() {
+    log "Setting up Flask application"
+    
+    # Clone or update repository
+    if [[ ! -d "$APP_DIR/.git" ]]; then
+        log "Cloning repository from $REPO_URL"
+        sudo git clone "$REPO_URL" "$APP_DIR"
+    else
+        log "Updating existing repository"
+        cd "$APP_DIR"
+        sudo git pull origin main
+    fi
+    
+    sudo chown -R "$CUSTOM_USER:$CUSTOM_USER" "$APP_DIR"
+    
+    # Handle environment file
+    if [[ -f "$APP_DIR/example.env" ]]; then
+        log "Setting up environment file"
+        sudo mv "$APP_DIR/example.env" "$APP_DIR/.env"
+        sudo chown "$CUSTOM_USER:$CUSTOM_USER" "$APP_DIR/.env"
+    fi
+}
 
-# Clone the Flask app repository if it doesn't exist
-if [ ! -d "$APP_DIR/.git" ]; then
-    echo "Cloning repository from $REPO_URL..."
-    sudo git clone "$REPO_URL" "$APP_DIR"
-    sudo chown -R "$CUSTOM_USER":"$CUSTOM_USER" "$APP_DIR"
-else
-    echo "Repository already exists. Pulling latest changes..."
+setup_python_env() {
+    log "Setting up Python virtual environment"
+    
     cd "$APP_DIR"
-    sudo git pull origin main
-fi
+    python3 -m venv venv
+    source venv/bin/activate
+    
+    [[ -z "${VIRTUAL_ENV:-}" ]] && error_exit "Virtual environment activation failed"
+    
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    deactivate
+    
+    sudo chown -R "$CUSTOM_USER:$CUSTOM_USER" "$APP_DIR/venv"
+}
 
-# Rename example.env to .env if it exists
-if [ -f "$APP_DIR/example.env" ]; then
-    echo "Renaming example.env to .env..."
-    sudo mv "$APP_DIR/example.env" "$APP_DIR/.env"
-    sudo chown "$CUSTOM_USER":"$CUSTOM_USER" "$APP_DIR/.env"
-else
-    echo "Warning: example.env not found. Skipping rename."
-fi
+setup_services() {
+    log "Setting up systemd services"
+    
+    local services_dir="$APP_DIR/services"
+    [[ ! -d "$services_dir" ]] && error_exit "Services directory '$services_dir' not found"
+    
+    # Copy and configure service files
+    for service in api celery; do
+        sudo cp "$services_dir/${service}.service" "/etc/systemd/system/"
+        sudo sed -i "s/User=root/User=$CUSTOM_USER/" "/etc/systemd/system/${service}.service"
+        sudo chmod 644 "/etc/systemd/system/${service}.service"
+    done
+    
+    # Enable and start services
+    sudo systemctl daemon-reload
+    sudo systemctl enable api.service celery.service
+    sudo systemctl start api.service celery.service
+    
+    # Verify services
+    for service in api celery; do
+        if sudo systemctl is-active --quiet "${service}.service"; then
+            log "$service service is running"
+        else
+            log "WARNING: $service service failed to start"
+        fi
+    done
+}
 
-# Change to the application directory
-cd "$APP_DIR"
-
-########################################
-# Set Up Python Virtual Environment
-########################################
-python3 -m venv venv
-source venv/bin/activate
-
-if [[ -z "$VIRTUAL_ENV" ]]; then
-    echo "Error: Virtual environment activation failed!"
-    exit 1
-fi
-
-sudo chown -R "$CUSTOM_USER":"$CUSTOM_USER" "$APP_DIR/venv"
-pip install --upgrade pip
-pip install -r requirements.txt
-deactivate
-
-########################################
-# Configure and Enable Systemd Services
-########################################
-SERVICES_DIR="$APP_DIR/services"
-TARGET_DIR="/etc/systemd/system"
-
-if [ ! -d "$SERVICES_DIR" ]; then
-    echo "Error: Services directory '$SERVICES_DIR' not found!"
-    exit 1
-fi
-
-# Copy service files to systemd directory
-echo "Copying service files to $TARGET_DIR..."
-sudo cp "$SERVICES_DIR/api.service" "$TARGET_DIR/api.service"
-sudo cp "$SERVICES_DIR/celery.service" "$TARGET_DIR/celery.service"
-
-# Update the 'User' field to the custom username
-echo "Updating service files to use user '$CUSTOM_USER'..."
-sudo sed -i "s/User=root/User=$CUSTOM_USER/" "$TARGET_DIR/api.service"
-sudo sed -i "s/User=root/User=$CUSTOM_USER/" "$TARGET_DIR/celery.service"
-
-# Set appropriate permissions
-sudo chmod 644 "$TARGET_DIR/api.service"
-sudo chmod 644 "$TARGET_DIR/celery.service"
-
-# Reload systemd, enable, and start services
-sudo systemctl daemon-reload
-sudo systemctl enable api.service
-sudo systemctl enable celery.service
+setup_aliases() {
+    log "Setting up shell aliases"
+    
+    local bashrc="$HOME/.bashrc"
+    
+    # Add dfh alias (simplified version)
+    if ! grep -q "^alias dfh=" "$bashrc" 2>/dev/null; then
+        cat << 'EOF' >> "$bashrc"
+# Show disk usage for main filesystems
+alias dfh='df -h | grep -E "^/dev/|^Filesystem" | grep -v docker'
+EOF
+    fi
+    
+    # Add sourcep alias
+    if ! grep -q "alias sourcep=" "$bashrc" 2>/dev/null; then
+        echo "alias sourcep='source /opt/cyberitex-flask-api/venv/bin/activate'" >> "$bashrc"
+    fi
+}
 
 ########################################
-# Validate Redis and Start Services
+# Main Execution
 ########################################
-if redis-cli ping | grep -q "PONG"; then
-    echo "Redis is running."
-else
-    echo "Error: Redis failed to start!"
-    exit 1
-fi
 
-sudo systemctl start api.service
-sudo systemctl start celery.service
+main() {
+    log "Starting $SCRIPT_NAME"
+    log "Parameters: USER=$CUSTOM_USER, RAM=$RAM_SIZE, HOSTNAME=${HOSTNAME_OPTIONAL:-none}"
+    
+    # check_root
+    setup_hostname
+    update_system
+    setup_redis
+    setup_swap
+    configure_system
+    setup_user
+    setup_git
+    setup_application
+    setup_python_env
+    setup_services
+    setup_aliases
+    
+    log "$SCRIPT_NAME completed successfully!"
+    log "Services status:"
+    sudo systemctl status api.service celery.service --no-pager -l
+}
 
-# Verify services are active
-if sudo systemctl is-active --quiet api.service; then
-    echo "API service is running."
-else
-    echo "API service failed to start."
-fi
-
-if sudo systemctl is-active --quiet celery.service; then
-    echo "Celery service is running."
-else
-    echo "Celery service failed to start."
-fi
-
-
-########################################
-# Add Aliases to .bashrc (if not present)
-########################################
-BASHRC_FILE=~/.bashrc
-
-# Alias 1: dfh
-if ! grep -qxF "alias dfh='df -h | grep -E \"/dev/sda1|/dev/sdb\" | grep -v \"/dev/sda15\"'" "$BASHRC_FILE"; then
-    echo "Adding 'dfh' alias to $BASHRC_FILE..."
-    echo "alias dfh='df -h | grep -E \"/dev/sda1|/dev/sdb\" | grep -v \"/dev/sda15\"'" | sudo tee -a "$BASHRC_FILE" > /dev/null
-fi
-
-# Alias 2: sourcep
-if ! grep -qxF "alias sourcep='source /opt/cyberitex-flask-api/venv/bin/activate'" "$BASHRC_FILE"; then
-    echo "Adding 'sourcep' alias to $BASHRC_FILE..."
-    echo "alias sourcep='source /opt/cyberitex-flask-api/venv/bin/activate'" | sudo tee -a "$BASHRC_FILE" > /dev/null
-fi
-
-source ~/.bashrc
-
-
-echo "CyberITEX API Setup Script completed!"
+# Run main function
+main "$@"
