@@ -107,12 +107,23 @@ configure_system() {
         "vm.swappiness=10"
         "vm.vfs_cache_pressure=754"
         "vm.max_map_count=262144"
+        "vm.dirty_ratio=15"
+        "vm.dirty_background_ratio=5"
         "fs.inotify.max_user_watches=524288"
     )
     
     for line in "${config_lines[@]}"; do
         grep -q "^$line" /etc/sysctl.conf || echo "$line" | sudo tee -a /etc/sysctl.conf > /dev/null
     done
+}
+
+configure_network() {
+    log "Configuring system parameters"
+    echo "net.core.rmem_default=262144" | sudo tee -a /etc/sysctl.conf
+    echo "net.core.rmem_max=16777216" | sudo tee -a /etc/sysctl.conf
+    echo "net.core.wmem_default=262144" | sudo tee -a /etc/sysctl.conf
+    echo "net.core.wmem_max=16777216" | sudo tee -a /etc/sysctl.conf
+    sudo sysctl -p
 }
 
 setup_user() {
@@ -238,6 +249,7 @@ main() {
     setup_python_env
     setup_services
     setup_aliases
+    configure_network
     
     log "$SCRIPT_NAME completed successfully!"
     log "Services status:"
