@@ -88,7 +88,63 @@
 
 ---
 
-## **6. `/v1/tasks/GetPendingRequests` (GET)**
+## **6. `/v1/tasks/status/<task_id>` (GET)**
+- **Description**: Retrieves the status of a specific Celery task by its ID.
+- **Rate Limit**: `30/minute`.
+- **Request**:
+  ```http
+  GET /v1/tasks/status/abc123-task-id
+  ```
+- **Response States**:
+
+  **PENDING** (task is queued or unknown):
+  ```json
+  {
+    "task_id": "abc123-task-id",
+    "state": "PENDING",
+    "message": "Task is pending or unknown"
+  }
+  ```
+
+  **STARTED** (task is running):
+  ```json
+  {
+    "task_id": "abc123-task-id",
+    "state": "STARTED",
+    "message": "Task has started"
+  }
+  ```
+
+  **SUCCESS** (task completed):
+  ```json
+  {
+    "task_id": "abc123-task-id",
+    "state": "SUCCESS",
+    "result": "task-result-here"
+  }
+  ```
+
+  **FAILURE** (task failed):
+  ```json
+  {
+    "task_id": "abc123-task-id",
+    "state": "FAILURE",
+    "error": "Error message describing what went wrong"
+  }
+  ```
+
+  **REVOKED** (task was cancelled):
+  ```json
+  {
+    "task_id": "abc123-task-id",
+    "state": "REVOKED",
+    "message": "Task was revoked"
+  }
+  ```
+
+---
+
+## **8. `/v1/tasks/GetPendingRequests` (GET)**
 - **Description**: Inspects Celery workers and retrieves all active, scheduled, and reserved tasks.
 - **Authentication**: Requires an API key.
 - **Request**:
@@ -98,15 +154,26 @@
 - **Response** (example with pending tasks):
   ```json
   {
-    "active": ["task-id-1", "task-id-2"],
-    "scheduled": ["task-id-3"],
-    "reserved": []
+    "response": [
+      {
+        "task_id": "task-id-1",
+        "state": "STARTED",
+        "worker": "celery@hostname",
+        "type": "active"
+      },
+      {
+        "task_id": "task-id-2",
+        "state": "PENDING",
+        "worker": "celery@hostname",
+        "type": "scheduled"
+      }
+    ]
   }
   ```
 
 ---
 
-## **7. `/health` (GET)**
+## **9. `/health` (GET)**
 - **Description**: API health check endpoint.
 - **Rate Limit**: `5/minute`.
 - **Request**:

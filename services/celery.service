@@ -9,7 +9,7 @@ User=root
 EnvironmentFile=/opt/cyberitex-flask-api/.env
 WorkingDirectory=/opt/cyberitex-flask-api
 Environment="PATH=/opt/cyberitex-flask-api/venv/bin"
-ExecStart=/opt/cyberitex-flask-api/venv/bin/celery -A v1.tasks.routes worker --loglevel=${CELERY_LOGLEVEL} -c ${CELERY_WORKERS}
+ExecStart=/opt/cyberitex-flask-api/venv/bin/celery -A common.celery_app worker --loglevel=${CELERY_LOGLEVEL} -c ${CELERY_WORKERS}
 Restart=always
 RestartSec=5s
 StandardOutput=journal

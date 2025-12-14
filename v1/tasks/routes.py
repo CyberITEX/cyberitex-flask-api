@@ -1,30 +1,12 @@
-from celery import Celery
 from celery.exceptions import SoftTimeLimitExceeded
-from flask import Blueprint, jsonify, redirect, request
+from flask import Blueprint, jsonify, request
+from common.celery_app import celery
 from common.utils.common_utils import require_api_key
 from common.utils.limiter import limiter
 from time import sleep
 
 
 tasks_routes = Blueprint("tasks", __name__)
-
-
-# Celery configuration (without creating a separate Flask app instance)
-def make_celery():
-    celery = Celery(
-        __name__, backend="redis://localhost:6379/0", broker="redis://localhost:6379/0"
-    )
-    celery.conf.update(
-        task_serializer="json",
-        result_serializer="json",
-        accept_content=["json"],
-        result_expires=10800,  # How long to keep task results (in seconds)
-    )
-    return celery
-
-
-# Initialize Celery
-celery = make_celery()
 
 
 @tasks_routes.route("/", methods=["GET"])
@@ -48,6 +30,29 @@ def background_task(self):
         return task_id
     except SoftTimeLimitExceeded:
         return f"Task exceeded soft time limit for"
+
+
+@tasks_routes.route("/status/<task_id>", methods=["GET"])
+@limiter.limit("30/minute")
+def get_task_status(task_id):
+    result = celery.AsyncResult(task_id)
+    response = {
+        "task_id": task_id,
+        "state": result.state,
+    }
+
+    if result.state == "PENDING":
+        response["message"] = "Task is pending or unknown"
+    elif result.state == "STARTED":
+        response["message"] = "Task has started"
+    elif result.state == "SUCCESS":
+        response["result"] = result.result
+    elif result.state == "FAILURE":
+        response["error"] = str(result.result)
+    elif result.state == "REVOKED":
+        response["message"] = "Task was revoked"
+
+    return jsonify(response), 200
 
 
 # Status route for checking The request status
