@@ -221,6 +221,9 @@ update_system() {
         git
         tree
         htop
+        neofetch
+        zip
+        jq
     )
 
     sudo apt-get install -y "${packages[@]}" || error_exit "Failed to install required packages"
