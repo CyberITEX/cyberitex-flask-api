@@ -221,7 +221,7 @@ update_system() {
         git
         tree
         htop
-        neofetch
+        fastfetch
         zip
         jq
     )
