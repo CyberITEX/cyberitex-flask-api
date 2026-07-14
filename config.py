@@ -10,7 +10,7 @@ class Config:
     HOST = os.getenv("FLASK_HOST", "0.0.0.0")
     PORT = int(os.getenv("FLASK_PORT", 5000))
     FLASK_ENV = os.getenv("FLASK_ENV", "development")
-    LIMITER_STORAGE = "redis://localhost:6379"
+    LIMITER_STORAGE = os.getenv("LIMITER_STORAGE", "redis://localhost:6379/0")
     WORDS_LIST = [
         # Animals
         "apple",

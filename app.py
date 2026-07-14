@@ -40,9 +40,10 @@ if not app.config["HOST"] or not app.config["PORT"]:
 app.register_blueprint(tools_routes, url_prefix="/v1/tools")
 app.register_blueprint(tasks_routes, url_prefix="/v1/tasks")
 
-# Initialize Limiter
+# Initialize Limiter (Flask-Limiter reads the storage URI from config during
+# init_app, so it must be set beforehand for the Redis backend to take effect)
+app.config["RATELIMIT_STORAGE_URI"] = app.config["LIMITER_STORAGE"]
 limiter.init_app(app)
-limiter.storage_uri = app.config["LIMITER_STORAGE"]
 
 
 # Configure CORS
@@ -89,6 +90,10 @@ def setup_logger(log_folder, log_file_name="api_logs"):
     return structlog.wrap_logger(logger)
 
 
+# Configure logging once at startup (not per request)
+request_logger = setup_logger("logs")
+
+
 # Helper function to filter sensitive headers
 def filter_headers(headers):
     sensitive_keys = {"Authorization", "X-Api-Key"}
@@ -100,10 +105,7 @@ def filter_headers(headers):
 @app.before_request
 def log_request_info():
     request_id = str(uuid.uuid4())
-    # Define log folder and logger
-    log_folder = "logs"
-    logger = setup_logger(log_folder)
-    logger = logger.bind(request_id=request_id)
+    logger = request_logger.bind(request_id=request_id)
 
     # Extract client and request details
     client_name, request_name = "", "base"
