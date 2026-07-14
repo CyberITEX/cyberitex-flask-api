@@ -234,6 +234,16 @@ update_system() {
         -o Dpkg::Options::="--force-confnew" \
         -o Dpkg::Options::="--force-confdef" || error_exit "Failed to upgrade packages"
 
+    # Choose system-info tool by release: fastfetch on Ubuntu 26+, neofetch on
+    # older releases (neofetch is EOL and absent from newer repos).
+    local fetch_tool="neofetch"
+    local os_version_major
+    os_version_major=$(. /etc/os-release 2>/dev/null && echo "${VERSION_ID%%.*}")
+    if [[ "$os_version_major" =~ ^[0-9]+$ ]] && (( os_version_major >= 26 )); then
+        fetch_tool="fastfetch"
+    fi
+    log "Using '$fetch_tool' for system info (release: ${os_version_major:-unknown})"
+
     # Install required packages
     local packages=(
         "linux-headers-$(uname -r)"
@@ -246,7 +256,7 @@ update_system() {
         git
         tree
         htop
-        fastfetch
+        "$fetch_tool"
         zip
         jq
     )
